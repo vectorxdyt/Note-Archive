@@ -8,7 +8,7 @@
   "auth": {
     "providers": {
       "googleSignIn": {
-        "oAuthBrandDisplayName": "notehub",
+        "oAuthBrandDisplayName": "Note Archive",
         "supportEmail": "petr.jansa.the5@gmail.com",
         "authorizedRedirectUris": [
           "https://notehub-classroom-pj2026.firebaseapp.com/__/auth/handler",

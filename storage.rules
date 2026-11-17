@@ -1,4 +1,4 @@
-// Legacy reference only. Notehub now uses Cloudinary Free for photos.
+// Legacy reference only. Note Archive now uses Cloudinary Free for photos.
 // This file is not deployed by firebase.json.
 rules_version = '2';
 service firebase.storage {

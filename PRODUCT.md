@@ -1,4 +1,4 @@
-# Notehub
+# Note Archive
 <!-- impeccable:product-schema 1 -->
 ## Platform
 web
@@ -7,7 +7,7 @@ A math teacher shares photographs of her board; students review previous materia
 ## Product Purpose
 A minimal, searchable archive of calculus lesson images.
 ## Brand Commitments
-Name: notehub. Minimalistic interface. Vercel deployment target.
+Name: Note Archive. Minimalistic interface. Vercel deployment target.
 ## Capabilities and Constraints
 Teacher uploads images into numbered Math Medic AP Calculus lesson destinations; students browse previous lessons. Calculus is the only course. No real class material was supplied. Example lessons must be labeled as examples.
 ## Stack

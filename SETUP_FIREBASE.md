@@ -1,6 +1,6 @@
-# Notehub setup — no credit card
+# Note Archive setup — no credit card
 
-Notehub uses **Firebase Spark (free)** for Google sign-in and lesson records, and **Cloudinary Free** for board photos. Do not upgrade Firebase to Blaze or enable Firebase Storage. Both services have free usage limits; this setup is not unlimited.
+Note Archive uses **Firebase Spark (free)** for Google sign-in and lesson records, and **Cloudinary Free** for board photos. Do not upgrade Firebase to Blaze or enable Firebase Storage. Both services have free usage limits; this setup is not unlimited.
 
 ## Your Firebase project is already created
 
@@ -36,7 +36,7 @@ CLOUDINARY_API_KEY=your-api-key
 CLOUDINARY_API_SECRET=your-api-secret
 ```
 
-These are server-only values. Keep the API secret out of chat, source control, and browser code. No unsigned upload preset is required: Notehub authenticates its uploads on the server. Do not enable an unsigned upload preset for this app.
+These are server-only values. Keep the API secret out of chat, source control, and browser code. No unsigned upload preset is required: Note Archive authenticates its uploads on the server. Do not enable an unsigned upload preset for this app.
 
 Monitor usage in the Cloudinary dashboard. The Free plan's allowance covers storage, bandwidth, and transformations together. Stay on Free; if you hit its limit, remove unused content or wait for applicable usage to reset. Do not add billing to this setup.
 
@@ -69,7 +69,7 @@ The current workspace already has the four public web settings. For a fresh copy
 
 Firebase's `storageBucket` value is not used. Photo storage is Cloudinary.
 
-Set `TEACHER_EMAIL` to the comma-separated list of approved teacher Google emails. These accounts can publish and delete lessons and manage classroom access; student accounts never receive teacher permissions. The teacher can keep the archive public or require students to sign in with Google emails approved in Notehub’s Access settings.
+Set `TEACHER_EMAIL` to the comma-separated list of approved teacher Google emails. These accounts can publish and delete lessons and manage classroom access; student accounts never receive teacher permissions. The teacher can keep the archive public or require students to sign in with Google emails approved in Note Archive’s Access settings.
 
 For local testing use **http://localhost:3000**. Under **Firebase Authentication → Settings → Authorized domains**, ensure `localhost` and the final Vercel hostname are authorized. Use bare hostnames in this console list, without protocols, paths, or ports. `firebase.json` includes the Google provider settings for the current project; update the authorized domains when the production URL is known.
 
@@ -106,11 +106,11 @@ Environment changes require a redeploy. Public Firebase values are embedded duri
 
 ## How classroom access works
 
-The teacher controls access inside Notehub. If **Allow anyone with the link** is on, the lesson archive can be viewed without an account. If it is off, every lesson, board-photo proxy, PDF, and new-notes notification is checked against the current approved-student email list on the server. Removing an email blocks that account’s future requests even if its session cookie has not expired. Teacher authorization still comes only from `TEACHER_EMAIL`.
+The teacher controls access inside Note Archive. If **Allow anyone with the link** is on, the lesson archive can be viewed without an account. If it is off, every lesson, board-photo proxy, PDF, and new-notes notification is checked against the current approved-student email list on the server. Removing an email blocks that account’s future requests even if its session cookie has not expired. Teacher authorization still comes only from `TEACHER_EMAIL`.
 
 The allowlist is stored in the server-only Firestore `settings/access` document. Firestore browser access remains denied. Student emails are not returned to other students or anonymous visitors.
 
-No web access control can retract information that was already delivered. A student may retain screenshots, downloaded PDFs, browser-cached data, or old direct photo URLs received before this access-control version. Changing the policy protects future Notehub requests but cannot erase those copies.
+No web access control can retract information that was already delivered. A student may retain screenshots, downloaded PDFs, browser-cached data, or old direct photo URLs received before this access-control version. Changing the policy protects future Note Archive requests but cannot erase those copies.
 
 ## How photo access works
 

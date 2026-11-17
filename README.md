@@ -1,4 +1,4 @@
-# notehub
+# Note Archive
 
 A minimal math classroom photo archive for Vercel. **No-credit-card setup:** Firebase Spark handles Google teacher sign-in and lesson records; Cloudinary Free stores board photos. Students browse without accounts. Both free services have usage limits.
 

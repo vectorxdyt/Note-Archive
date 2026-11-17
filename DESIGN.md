@@ -1,4 +1,4 @@
-# Notehub design
+# Note Archive design
 
 A quiet lesson archive for reviewing board photographs after class. Preserve warm paper, forest green, and restrained yellow accents.
 
