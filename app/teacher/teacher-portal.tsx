@@ -3,12 +3,13 @@
 import {useEffect, useState, type FormEvent} from 'react';
 import {
   ArrowLeft, ArrowUpRight, BookOpen, Check, GraduationCap, Images, LockKeyhole,
-  LogOut, ShieldCheck, Trash2, UploadCloud, X,
+  LogOut, Plus, ShieldCheck, Trash2, UploadCloud, X,
 } from 'lucide-react';
 import {calculusUnits, findCurriculumLesson} from '@/lib/curriculum.mjs';
 import {googleSignInError, signInWithGoogle} from '@/lib/firebase-client';
 import {localeFromStorage, translate, type Locale, type TranslationKey} from '@/lib/i18n';
 import {type Lesson} from '@/lib/lessons';
+import {type Classroom} from '@/lib/classroom-policy';
 import AccessSettings from '../access-settings';
 import AccessibilityControls from '../accessibility-controls';
 import ThemeToggle from '../theme-toggle';
@@ -62,6 +63,9 @@ export default function TeacherPortal({authenticated, configured, email}: {authe
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [activeClassroomId, setActiveClassroomId] = useState('');
+  const [newClassroomName, setNewClassroomName] = useState('');
   const [loadingLessons, setLoadingLessons] = useState(authenticated);
   const [files, setFiles] = useState<File[]>([]);
   const [keyIdeas, setKeyIdeas] = useState('');
@@ -74,22 +78,41 @@ export default function TeacherPortal({authenticated, configured, email}: {authe
     try { changeLocale(localeFromStorage(localStorage.getItem('notehub-locale'))); } catch {}
   }, []);
   useEffect(() => { if (!message) return; const timeout = setTimeout(() => setMessage(''), 4000); return () => clearTimeout(timeout); }, [message]);
-  useEffect(() => { if (authenticated) loadLessons(); }, [authenticated]);
+  useEffect(() => { if (authenticated) loadWorkspace(); }, [authenticated]);
 
   function changeLocale(next: Locale) {
     setLocale(next);
     document.documentElement.lang = next;
-    document.title = next === 'es' ? 'notehub — Espacio del docente' : 'notehub — Teacher workspace';
+    document.title = next === 'es' ? 'Note Archive — Espacio del docente' : 'Note Archive — Teacher workspace';
     try { localStorage.setItem('notehub-locale', next); } catch {}
   }
 
-  async function loadLessons() {
+  async function loadWorkspace() {
     setLoadingLessons(true);
     try {
-      const data = await api('/api/lessons');
-      setLessons(Array.isArray(data.lessons) ? data.lessons as Lesson[] : []);
+      const [lessonData, classroomData] = await Promise.all([api('/api/lessons'), api('/api/classrooms')]);
+      const nextClassrooms = Array.isArray(classroomData.classrooms) ? classroomData.classrooms as Classroom[] : [];
+      setLessons(Array.isArray(lessonData.lessons) ? lessonData.lessons as Lesson[] : []);
+      setClassrooms(nextClassrooms);
+      setActiveClassroomId(current => nextClassrooms.some(classroom => classroom.id === current) ? current : nextClassrooms[0]?.id || '');
     } catch (loadError) { setError((loadError as Error).message); }
     finally { setLoadingLessons(false); }
+  }
+
+  async function createNewClassroom(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = newClassroomName.trim();
+    if (!name) return;
+    setBusy(true);
+    setError('');
+    try {
+      const classroom = await api('/api/classrooms', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}) as unknown as Classroom;
+      setClassrooms(current => [...current, classroom]);
+      setActiveClassroomId(classroom.id);
+      setNewClassroomName('');
+      notify(tr('classroomCreated', {classroom: classroom.name}));
+    } catch (createError) { setError((createError as Error).message || tr('classroomCreateError')); }
+    finally { setBusy(false); }
   }
 
   async function signIn() {
@@ -117,6 +140,7 @@ export default function TeacherPortal({authenticated, configured, email}: {authe
 
   async function publish(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!activeClassroomId) { setError(tr('chooseClassroom')); return; }
     if (!files.length) { setError(tr('addPhotoRequired')); return; }
     setBusy(true);
     setError('');
@@ -160,9 +184,12 @@ export default function TeacherPortal({authenticated, configured, email}: {authe
     finally { setBusy(false); }
   }
 
+  const activeClassroom = classrooms.find(classroom => classroom.id === activeClassroomId) ?? null;
+  const classroomLessons = lessons.filter(lesson => (lesson.classroomId || 'ap-calculus') === activeClassroomId);
+
   if (!authenticated) return <div className="teacher-login-shell">
     <header className="teacher-header">
-      <a className="brand" href="/" aria-label={tr('home')}><span className="brand-icon"><BookOpen size={20}/></span>notehub<span className="brand-dot">.</span></a>
+      <a className="brand" href="/" aria-label={tr('home')}><span className="brand-icon"><BookOpen size={20}/></span>Note Archive<span className="brand-dot">.</span></a>
       <div className="teacher-header-actions"><AccessibilityControls locale={locale} onLocaleChange={changeLocale}/><ThemeToggle locale={locale}/><a className="teacher-back-link" href="/"><ArrowLeft size={16}/>{tr('studentArchive')}</a></div>
     </header>
     <main className="teacher-login-main">
@@ -181,7 +208,7 @@ export default function TeacherPortal({authenticated, configured, email}: {authe
 
   return <div className="teacher-shell">
     <header className="teacher-header">
-      <a className="brand" href="/" aria-label={tr('home')}><span className="brand-icon"><BookOpen size={20}/></span>notehub<span className="brand-dot">.</span></a>
+      <a className="brand" href="/" aria-label={tr('home')}><span className="brand-icon"><BookOpen size={20}/></span>Note Archive<span className="brand-dot">.</span></a>
       <div className="teacher-header-actions"><AccessibilityControls locale={locale} onLocaleChange={changeLocale}/><ThemeToggle locale={locale}/><a className="teacher-back-link" href="/"><ArrowLeft size={16}/>{tr('studentArchive')}</a><button className="teacher-signout" onClick={signOut} disabled={busy} title={email ? tr('signedInAs', {email}) : tr('signOut')}><LogOut size={16}/>{tr('signOut')}</button></div>
     </header>
     <main className="teacher-main">
@@ -190,10 +217,18 @@ export default function TeacherPortal({authenticated, configured, email}: {authe
         <span className="teacher-identity"><ShieldCheck size={16}/><span>{tr('verifiedTeacher')}<small>{email}</small></span></span>
       </section>
 
+      <section className="classroom-command-bar" aria-labelledby="classroom-manager-title">
+        <div className="classroom-command-copy"><span className="eyebrow">{tr('classrooms')}</span><h2 id="classroom-manager-title">{activeClassroom?.name || tr('chooseClassroom')}</h2><p>{tr('manageClassroomHelp')}</p></div>
+        <label className="classroom-select">{tr('currentClassroom')}<select value={activeClassroomId} onChange={event => setActiveClassroomId(event.target.value)} aria-label={tr('chooseClassroom')}>{classrooms.map(classroom => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</select></label>
+        <form className="create-classroom-form" onSubmit={createNewClassroom}><label htmlFor="new-classroom-name">{tr('newClassroomName')}</label><div><input id="new-classroom-name" value={newClassroomName} onChange={event => setNewClassroomName(event.target.value)} maxLength={80} placeholder={tr('newClassroomPlaceholder')}/><button className="secondary-button" disabled={busy || !newClassroomName.trim()}><Plus size={16}/>{busy ? tr('creatingClassroom') : tr('createClassroom')}</button></div></form>
+      </section>
+
       <div className="teacher-dashboard">
         <section className="teacher-panel upload-panel" aria-labelledby="upload-title">
           <div className="teacher-panel-heading"><span className="teacher-panel-icon"><UploadCloud size={21}/></span><div><span className="eyebrow">{tr('addLesson')}</span><h2 id="upload-title">{tr('addCalculusNotes')}</h2><p>{tr('uploadIntro')}</p></div></div>
           <form className="teacher-upload-form" onSubmit={publish}>
+            <input type="hidden" name="classroomId" value={activeClassroomId}/>
+            {activeClassroom && <p className="publish-destination"><GraduationCap size={15}/>{tr('publishingToClassroom', {classroom: activeClassroom.name})}</p>}
             <label>{tr('lessonTitle')}<input name="title" required maxLength={120} placeholder={tr('lessonTitlePlaceholder')}/></label>
             <div className="form-row"><input type="hidden" name="topic" value="Calculus"/><label>{tr('mathMedicLesson')}<select name="curriculumLesson" defaultValue="" required><option value="" disabled>{tr('chooseLesson')}</option>{calculusUnits.map(unit => <optgroup key={unit.id} label={`${tr('unit')} ${unit.number} · ${unit.title}`}>{unit.lessons.map(lesson => <option key={lesson.id} value={lesson.id}>{lesson.label}</option>)}</optgroup>)}</select></label><label>{tr('lessonDate')}<input type="date" name="date" defaultValue={today()} required/></label></div>
             <label className="key-ideas-field">{tr('keyIdeas')} <span className="optional">{tr('optional')}</span><span className="field-help" id="teacher-key-ideas-help">{tr('keyIdeasHelp')}</span><textarea name="keyIdeas" maxLength={1500} placeholder={tr('keyIdeasPlaceholder')} rows={4} value={keyIdeas} onChange={event => setKeyIdeas(event.target.value)} aria-describedby="teacher-key-ideas-help teacher-key-ideas-count"/><span className="character-count" id="teacher-key-ideas-count">{keyIdeas.length.toLocaleString(locale === 'es' ? 'es-US' : 'en-US')} / 1,500</span></label>
@@ -205,15 +240,15 @@ export default function TeacherPortal({authenticated, configured, email}: {authe
           </form>
         </section>
 
-        <AccessSettings locale={locale} notify={notify} onSaved={() => {}}/>
+        {activeClassroom && <AccessSettings key={activeClassroom.id} classroom={activeClassroom} locale={locale} notify={notify} onSaved={updated => setClassrooms(current => current.map(classroom => classroom.id === updated.id ? updated : classroom))}/>}
       </div>
 
       <section className="teacher-panel published-panel" aria-labelledby="published-title">
-        <div className="teacher-panel-heading"><span className="teacher-panel-icon"><BookOpen size={21}/></span><div><span className="eyebrow">{tr('publishedLessons')}</span><h2 id="published-title">{tr('publishedLibrary')}</h2><p>{tr('publishedLibraryIntro')}</p></div><span className="published-count">{String(lessons.length).padStart(2, '0')}</span></div>
-        {loadingLessons ? <div className="settings-loading" role="status">{tr('gatheringNotes')}</div> : lessons.length === 0 ? <p className="teacher-empty">{tr('noPublishedLessons')}</p> : <div className="teacher-lesson-list">{lessons.map(lesson => <article key={lesson.id}>
+        <div className="teacher-panel-heading"><span className="teacher-panel-icon"><BookOpen size={21}/></span><div><span className="eyebrow">{activeClassroom?.name || tr('publishedLessons')}</span><h2 id="published-title">{tr('publishedLibrary')}</h2><p>{tr('publishedLibraryIntro')}</p></div><span className="published-count">{String(classroomLessons.length).padStart(2, '0')}</span></div>
+        {loadingLessons ? <div className="settings-loading" role="status">{tr('gatheringNotes')}</div> : classroomLessons.length === 0 ? <p className="teacher-empty">{tr('noPublishedLessons')}</p> : <div className="teacher-lesson-list">{classroomLessons.map(lesson => <article key={lesson.id}>
           <div className="teacher-lesson-thumb"><img src={lesson.images[0]} alt=""/></div>
           <div className="teacher-lesson-copy"><span>{findCurriculumLesson(lesson.curriculumLesson)?.label || tr('calculus')} · {dateLabel(lesson.date, locale)}</span><h3>{lesson.title}</h3><small>{lesson.images.length} {lesson.images.length === 1 ? tr('photoSingular') : tr('photoPlural')}</small></div>
-          <div className="teacher-lesson-actions"><a href={`/?open=${encodeURIComponent(lesson.id)}`}><ArrowUpRight size={15}/>{tr('viewInArchive')}</a>{confirmDelete === lesson.id ? <><button className="delete-button" onClick={() => remove(lesson)} disabled={busy}>{busy ? tr('deleting') : tr('deleteLesson')}</button><button className="secondary-button compact" onClick={() => setConfirmDelete('')}>{tr('keepLesson')}</button></> : <button className="delete-button icon-delete" onClick={() => setConfirmDelete(lesson.id)} aria-label={`${tr('deleteLesson')}: ${lesson.title}`}><Trash2 size={16}/></button>}</div>
+          <div className="teacher-lesson-actions"><a href={`/?classroom=${encodeURIComponent(activeClassroomId)}&open=${encodeURIComponent(lesson.id)}`}><ArrowUpRight size={15}/>{tr('viewInArchive')}</a>{confirmDelete === lesson.id ? <><button className="delete-button" onClick={() => remove(lesson)} disabled={busy}>{busy ? tr('deleting') : tr('deleteLesson')}</button><button className="secondary-button compact" onClick={() => setConfirmDelete('')}>{tr('keepLesson')}</button></> : <button className="delete-button icon-delete" onClick={() => setConfirmDelete(lesson.id)} aria-label={`${tr('deleteLesson')}: ${lesson.title}`}><Trash2 size={16}/></button>}</div>
         </article>)}</div>}
       </section>
     </main>
