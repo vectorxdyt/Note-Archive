@@ -2,8 +2,8 @@ import 'server-only';
 import webpush, {type PushSubscription} from 'web-push';
 import {firestore} from './firebase-admin';
 import {subscriptionId, validPushSubscription} from './notification-security.mjs';
-import {getAccessPolicy} from './access';
 import {approvedViewerEmail} from './access-policy';
+import type {Classroom} from './classroom-policy';
 
 export const notificationsConfigured = () => Boolean(
   process.env.WEB_PUSH_PUBLIC_KEY && process.env.WEB_PUSH_PRIVATE_KEY && process.env.WEB_PUSH_SUBJECT
@@ -33,25 +33,21 @@ export async function removeSubscription(endpoint: unknown) {
   return true;
 }
 
-export async function notifySubscribers(lesson: {id: string; title: string; curriculumLesson: string}) {
+export async function notifySubscribers(lesson: {id: string; title: string; curriculumLesson: string; classroom: Classroom}) {
   if (!notificationsConfigured()) return {sent: 0, failed: 0};
   configureWebPush();
-  const policy = await getAccessPolicy();
   const snapshot = await firestore().collection('push_subscriptions').get();
   const payload = JSON.stringify({
-    title: 'New calculus notes',
+    title: `New notes in ${lesson.classroom.name}`,
     body: lesson.title,
-    url: `/?lesson=${encodeURIComponent(lesson.curriculumLesson)}&open=${encodeURIComponent(lesson.id)}`,
+    url: `/?classroom=${encodeURIComponent(lesson.classroom.id)}&lesson=${encodeURIComponent(lesson.curriculumLesson)}&open=${encodeURIComponent(lesson.id)}`,
     tag: `notehub-${lesson.id}`,
   });
   let sent = 0;
   let failed = 0;
   await Promise.all(snapshot.docs.map(async doc => {
     const subscription = doc.data() as PushSubscription;
-    if (!policy.publicAccess && !approvedViewerEmail((subscription as PushSubscription & {owner_email?: string}).owner_email, policy, process.env.TEACHER_EMAIL)) {
-      await doc.ref.delete();
-      return;
-    }
+    if (!lesson.classroom.publicAccess && !approvedViewerEmail((subscription as PushSubscription & {owner_email?: string}).owner_email, lesson.classroom, process.env.TEACHER_EMAIL)) return;
     if (!validPushSubscription(subscription)) { failed++; await doc.ref.delete(); return; }
     try {
       await webpush.sendNotification(subscription, payload, {TTL: 86400, urgency: 'high'});

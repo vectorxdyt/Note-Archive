@@ -58,7 +58,7 @@ export function createLessonPdf(title: string, photos: PdfPhoto[]): Uint8Array {
     objects[contentId - 1] = stream('', Buffer.from(drawing, 'ascii'));
   });
 
-  objects[infoId - 1] = object(`<< /Title <${utf16Hex(title)}> /Author <${utf16Hex('Notehub')}> /Creator <${utf16Hex('Notehub')}> >>`);
+  objects[infoId - 1] = object(`<< /Title <${utf16Hex(title)}> /Author <${utf16Hex('Note Archive')}> /Creator <${utf16Hex('Note Archive')}> >>`);
 
   const header = Buffer.from('%PDF-1.7\n%\xE2\xE3\xCF\xD3\n', 'binary');
   const chunks: Buffer[] = [header];

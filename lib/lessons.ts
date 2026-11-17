@@ -1,4 +1,4 @@
-export type Lesson={id:string;title:string;topic:string;date:string;description:string;keyIdeas?:string;keyIdeasSource?:'teacher'|'ai-draft'|null;images:string[];curriculumLesson?:string|null;created_at?:string};
+export type Lesson={id:string;title:string;topic:string;date:string;description:string;keyIdeas?:string;keyIdeasSource?:'teacher'|'ai-draft'|null;images:string[];curriculumLesson?:string|null;classroomId?:string;created_at?:string};
 export function lessonMatchesSearch(lesson:Lesson,query:string,curriculumLabel=''){
   const needle=query.trim().toLowerCase();
   if(!needle)return true;

@@ -46,7 +46,7 @@ export function sanitizeKeyIdeas(value: unknown): string | undefined {
 }
 
 export function validLesson(value: unknown, cloudName: string): value is {
-  title: string; topic: string; date: string; description: string; keyIdeas?: string; images: string[]; curriculumLesson: string;
+  title: string; topic: string; date: string; description: string; keyIdeas?: string; images: string[]; curriculumLesson: string; classroomId?: string;
 } {
   if (!value || typeof value !== 'object') return false;
   const { title, topic, date, description, keyIdeas, images, curriculumLesson } = value as Record<string, unknown>;

@@ -4,8 +4,9 @@ import { adminAuth } from './firebase-admin';
 import { allowedTeacher } from './security';
 import {verifiedGoogleEmail} from './google-identity.mjs';
 import { photoStorageConfigured } from './cloudinary';
-import {getAccessPolicy} from './access';
 import {approvedStudent} from './access-policy';
+import {getClassrooms} from './classrooms';
+import {validClassroomId} from './classroom-policy';
 
 export const SESSION_COOKIE = 'notehub_firebase_session';
 export const SESSION_SECONDS = 60 * 60 * 24 * 5;
@@ -35,12 +36,21 @@ export async function teacher() {
   const claims = await sessionUser();
   return claims && allowedTeacher(claims, process.env.TEACHER_EMAIL) ? claims : null;
 }
-export async function viewerAccess() {
-  if (!configured()) return {authorized: true, publicAccess: true, teacher: false, user: null, email: null, policy: {publicAccess: true, allowedEmails: []}};
-  const [policy, user] = await Promise.all([getAccessPolicy(), sessionUser()]);
+export async function viewerAccess(classroomId?: string) {
+  if (!configured()) return {authorized: true, publicAccess: true, teacher: false, user: null, email: null, classrooms: []};
+  if (classroomId && !validClassroomId(classroomId)) return {authorized: false, publicAccess: false, teacher: false, user: null, email: null, classrooms: []};
+  const [classrooms, user] = await Promise.all([getClassrooms(), sessionUser()]);
   const isTeacher = Boolean(user && allowedTeacher(user, process.env.TEACHER_EMAIL));
-  const authorized = policy.publicAccess || isTeacher || approvedStudent(user, policy);
-  return {authorized, publicAccess: policy.publicAccess, teacher: isTeacher, user, email: user ? verifiedGoogleEmail(user) : null, policy};
+  const accessible = isTeacher ? classrooms : classrooms.filter(classroom => classroom.publicAccess || approvedStudent(user, classroom));
+  const authorized = classroomId ? accessible.some(classroom => classroom.id === classroomId) : accessible.length > 0;
+  return {
+    authorized,
+    publicAccess: accessible.some(classroom => classroom.publicAccess),
+    teacher: isTeacher,
+    user,
+    email: user ? verifiedGoogleEmail(user) : null,
+    classrooms: accessible,
+  };
 }
 export function failure(error: unknown) {
   // Do not return SDK errors or service account details to browsers.
