@@ -4,6 +4,7 @@ import { firestore } from '@/lib/firebase-admin';
 import { createLessonPdf, lessonPdfFilename, type PdfPhoto } from '@/lib/lesson-pdf';
 import { imagePath, validId } from '@/lib/security';
 import { configured, failure, viewerAccess } from '@/lib/server';
+import {classroomForLesson} from '@/lib/classroom-policy';
 
 export const runtime = 'nodejs';
 
@@ -49,12 +50,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const example = examples.find(item => item.id === id);
       if (example) lesson = example;
     } else {
-      const access = await viewerAccess();
-      if (!access.authorized) return Response.json({error: 'Sign in with an approved student account to download these notes.'}, {status: 401, headers: {'Cache-Control': 'no-store'}});
       if (!validId(id)) return Response.json({ error: 'Invalid lesson.' }, { status: 400 });
       const doc = await firestore().collection('lessons').doc(id).get();
       if (doc.exists) {
         const data = doc.data()!;
+        const access = await viewerAccess(classroomForLesson(data.classroomId));
+        if (!access.authorized) return Response.json({error: 'Sign in with an approved student account to download these notes.'}, {status: 401, headers: {'Cache-Control': 'no-store'}});
         lesson = { title: data.title, date: data.date, images: data.images };
       }
     }
