@@ -15,6 +15,9 @@ import NarrationControls from './narration-controls';
 import NotificationToggle from './notification-toggle';
 import ThemeToggle from './theme-toggle';
 
+type ClassroomSummary = {id: string; name: string};
+const demoClassroom: ClassroomSummary = {id: 'ap-calculus', name: 'AP Calculus'};
+
 const dateLabel = (date: string, locale: Locale) => new Date(`${date}T12:00:00`).toLocaleDateString(locale === 'es' ? 'es-US' : 'en-US', {month: 'short', day: 'numeric', year: 'numeric'});
 
 async function api(url: string, options?: RequestInit) {
@@ -44,6 +47,8 @@ function Modal({children, onClose, label, closeLabel, wide = false}: {children: 
 
 export default function Home() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [classrooms, setClassrooms] = useState<ClassroomSummary[]>([]);
+  const [activeClassroomId, setActiveClassroomId] = useState('');
   const [demo, setDemo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -85,8 +90,12 @@ export default function Home() {
       setViewerEmail(sessionReady && typeof session.value.email === 'string' ? session.value.email : '');
       if (library.status === 'fulfilled') {
         const data = library.value;
-        setDemo(data.demo === true);
-        setLessons(data.demo === true ? examples : Array.isArray(data.lessons) ? data.lessons as Lesson[] : []);
+        const isDemo = data.demo === true;
+        const nextClassrooms = isDemo ? [demoClassroom] : Array.isArray(data.classrooms) ? data.classrooms as ClassroomSummary[] : [];
+        setDemo(isDemo);
+        setLessons(isDemo ? examples : Array.isArray(data.lessons) ? data.lessons as Lesson[] : []);
+        setClassrooms(nextClassrooms);
+        setActiveClassroomId(current => nextClassrooms.some(classroom => classroom.id === current) ? current : nextClassrooms[0]?.id || '');
       } else {
         setLessons([]);
         if (canView) throw library.reason;
@@ -110,15 +119,17 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     const destination = params.get('lesson');
     const lesson = lessons.find(item => item.id === params.get('open'));
+    const classroom = params.get('classroom');
+    if (classroom && classrooms.some(item => item.id === classroom)) setActiveClassroomId(classroom);
     if (destination) setSelectedLesson(destination);
     if (lesson) { setActive(lesson); setPhotoIndex(0); }
     if (destination || lesson) history.replaceState({}, '', window.location.pathname);
-  }, [lessons]);
+  }, [lessons, classrooms]);
 
   function changeLocale(next: Locale) {
     setLocale(next);
     document.documentElement.lang = next;
-    document.title = next === 'es' ? 'notehub — Claridad después de clase' : 'notehub — A little clarity after class';
+    document.title = next === 'es' ? 'Note Archive — Claridad después de clase' : 'Note Archive — A little clarity after class';
     try { localStorage.setItem('notehub-locale', next); } catch {}
   }
 
@@ -129,17 +140,31 @@ export default function Home() {
     catch { notify(tr('bookmarksUnavailable')); }
   }
 
-  const visible = lessons
+  const activeClassroom = classrooms.find(classroom => classroom.id === activeClassroomId) ?? classrooms[0] ?? demoClassroom;
+  const classroomLessons = lessons.filter(lesson => (lesson.classroomId || 'ap-calculus') === activeClassroom.id);
+  const visible = classroomLessons
     .filter(lesson => (!selectedLesson || lesson.curriculumLesson === selectedLesson) && (!savedOnly || saved.includes(lesson.id)) && lessonMatchesSearch(lesson, query, findCurriculumLesson(lesson.curriculumLesson)?.label || ''))
     .sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'oldest' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
   const selectionLabel = findCurriculumLesson(selectedLesson)?.label;
-  const lessonCount = (id: string) => lessons.filter(lesson => lesson.curriculumLesson === id).length;
+  const lessonCount = (id: string) => classroomLessons.filter(lesson => lesson.curriculumLesson === id).length;
+
+  function switchClassroom(id: string) {
+    setActiveClassroomId(id);
+    setSelectedLesson('');
+    setSavedOnly(false);
+    setQuery('');
+    setActive(null);
+  }
 
   async function studentSignIn() {
     setBusy(true);
     setAccessError('');
     try { await signInWithGoogle('viewer'); await load(); }
-    catch (signInError) { setAccessError(signInMessage(signInError)); }
+    catch (signInError) {
+      const detail = signInMessage(signInError);
+      setAccessError(detail);
+      if (authorized) notify(detail);
+    }
     finally { setBusy(false); }
   }
 
@@ -170,11 +195,12 @@ export default function Home() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <a className="brand" href="/" aria-label={tr('home')}><span className="brand-icon"><BookOpen size={20} strokeWidth={1.9}/></span>notehub<span className="brand-dot">.</span></a>
-      <div className="class-label"><span className="class-avatar"><GraduationCap size={20}/></span><div>{tr('calculus')}<small>{tr('classroomNotes')}</small></div></div>
+      <a className="brand" href="/" aria-label={tr('home')}><span className="brand-icon"><BookOpen size={20} strokeWidth={1.9}/></span>Note Archive<span className="brand-dot">.</span></a>
+      <div className="class-label"><span className="class-avatar"><GraduationCap size={20}/></span><div>{activeClassroom.name}<small>{tr('classroomNotes')}</small></div></div>
+      {classrooms.length > 1 && <label className="student-classroom-switcher"><span>{tr('currentClassroom')}</span><select value={activeClassroom.id} onChange={event => switchClassroom(event.target.value)}>{classrooms.map(classroom => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</select></label>}
       <nav aria-label={tr('library')}>
-        <button aria-pressed={!savedOnly && !selectedLesson} className={!savedOnly && !selectedLesson ? 'nav-item active' : 'nav-item'} onClick={() => { setSavedOnly(false); setSelectedLesson(''); }}><BookOpen size={18}/>{tr('calculus')}<span>{lessons.length}</span></button>
-        <button aria-pressed={savedOnly} className={savedOnly ? 'nav-item active' : 'nav-item'} onClick={() => { setSavedOnly(true); setSelectedLesson(''); }}><Bookmark size={18}/>{tr('savedNotes')}<span>{lessons.filter(lesson => saved.includes(lesson.id)).length}</span></button>
+        <button aria-pressed={!savedOnly && !selectedLesson} className={!savedOnly && !selectedLesson ? 'nav-item active' : 'nav-item'} onClick={() => { setSavedOnly(false); setSelectedLesson(''); }}><BookOpen size={18}/>{tr('allNotes')}<span>{classroomLessons.length}</span></button>
+        <button aria-pressed={savedOnly} className={savedOnly ? 'nav-item active' : 'nav-item'} onClick={() => { setSavedOnly(true); setSelectedLesson(''); }}><Bookmark size={18}/>{tr('savedNotes')}<span>{classroomLessons.filter(lesson => saved.includes(lesson.id)).length}</span></button>
       </nav>
       <nav className="curriculum-nav" aria-label={tr('lessonOptions')}>
         <span className="nav-label">{tr('lessonsNav')}</span>
@@ -189,12 +215,13 @@ export default function Home() {
 
     <div className="main-shell">
       <header className="topbar">
-        <span className="breadcrumb">{tr('yourClassroom')}<span>/</span><strong>{savedOnly ? tr('savedNotes') : selectionLabel || tr('calculus')}</strong></span>
+        <span className="breadcrumb">{activeClassroom.name}<span>/</span><strong>{savedOnly ? tr('savedNotes') : selectionLabel || tr('allNotes')}</strong></span>
         <div className="topbar-actions">
-          <span className="topbar-note"><GraduationCap size={16}/>{tr('calculus')}</span>
+          <span className="topbar-note"><GraduationCap size={16}/>{activeClassroom.name}</span>
           <AccessibilityControls locale={locale} onLocaleChange={changeLocale}/>
           {authorized && <NotificationToggle notify={notify} locale={locale}/>}
           <ThemeToggle locale={locale}/>
+          {!signedIn && authorized && <button className="student-signin-button" onClick={studentSignIn} disabled={busy}><GraduationCap size={16}/>{busy ? tr('signingIn') : tr('studentSignIn')}</button>}
           {signedIn && <button className="icon-button signout-button" title={viewerEmail ? tr('signedInAs', {email: viewerEmail}) : tr('signOut')} aria-label={tr('signOut')} onClick={async () => { try { await api('/api/auth', {method: 'DELETE'}); setActive(null); await load(); notify(tr('signedOut')); } catch (signOutError) { notify((signOutError as Error).message); } }}><LogOut size={18}/><span>{tr('signOut')}</span></button>}
         </div>
       </header>
@@ -210,8 +237,8 @@ export default function Home() {
           <a className="teacher-link gate-teacher-link" href="/teacher" target="_blank" rel="noreferrer"><GraduationCap size={17}/>{tr('teacherAccess')}<ArrowUpRight size={15}/></a>
         </section> : <>
         <div className="page-heading">
-          <div className="heading-copy"><span className="eyebrow">{tr('archiveEyebrow')}</span><h1>{savedOnly ? tr('savedLessons') : tr('calculusArchive')}</h1><p>{savedOnly ? tr('savedDescription') : tr('archiveDescription')}</p></div>
-          <div className="heading-actions"><span className="archive-count">{String(lessons.length).padStart(2, '0')}<small>{tr('publishedLessons')}</small></span></div>
+          <div className="heading-copy"><span className="eyebrow">{activeClassroom.name.toUpperCase()} · NOTE ARCHIVE</span><h1>{savedOnly ? tr('savedLessons') : activeClassroom.name}</h1><p>{savedOnly ? tr('savedDescription') : tr('archiveDescription')}</p></div>
+          <div className="heading-actions"><span className="archive-count">{String(classroomLessons.length).padStart(2, '0')}<small>{tr('publishedLessons')}</small></span></div>
         </div>
 
         <section className="library" aria-label={tr('lessonLibrary')}>
@@ -235,7 +262,7 @@ export default function Home() {
               <div className="lesson-info"><div className="card-meta"><span className="topic-tag">{findCurriculumLesson(lesson.curriculumLesson)?.label || tr('calculus')}</span><span>{dateLabel(lesson.date, locale)}</span></div><button className="lesson-title" onClick={() => { setActive(lesson); setPhotoIndex(0); }}>{lesson.title}</button>{lesson.keyIdeas && <p className="card-summary">{lesson.keyIdeas}</p>}<div className="card-bottom"><button className="view-lesson" onClick={() => { setActive(lesson); setPhotoIndex(0); }} aria-label={`${tr('viewLesson')}: ${lesson.title}`}>{tr('viewLesson')}<ArrowUpRight size={15}/></button><button className={saved.includes(lesson.id) ? 'bookmark saved' : 'bookmark'} aria-label={tr(saved.includes(lesson.id) ? 'unsaveLesson' : 'saveLesson', {title: lesson.title})} aria-pressed={saved.includes(lesson.id)} onClick={() => bookmark(lesson.id)}><Bookmark size={17} fill={saved.includes(lesson.id) ? 'currentColor' : 'none'}/></button></div></div>
             </article>)}</div>}
 
-          <div className="library-footer"><span>{tr('archiveFooter')}</span><span className="footer-mark"><BookOpen size={15}/>notehub / {new Date().getFullYear()}</span></div>
+          <div className="library-footer"><span>{activeClassroom.name} · {tr('classroomNotes')}</span><span className="footer-mark"><BookOpen size={15}/>Note Archive / {new Date().getFullYear()}</span></div>
         </section>
         </>}
       </main>
