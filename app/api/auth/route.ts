@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { adminAuth } from '@/lib/firebase-admin';
 import { allowedTeacher } from '@/lib/security';
 import { approvedStudent } from '@/lib/access-policy';
-import { getAccessPolicy } from '@/lib/access';
+import { getClassrooms } from '@/lib/classrooms';
 import { configured, failure, sameOrigin, viewerAccess, SESSION_COOKIE, SESSION_SECONDS } from '@/lib/server';
 
 export const runtime = 'nodejs';
@@ -28,13 +28,13 @@ export async function POST(req: Request) {
     if (!Number.isFinite(age) || age < -30 || age > 300) {
       return Response.json({ error: 'Please sign in with Google again to start a fresh session.' }, { status: 401 });
     }
-    const policy = await getAccessPolicy();
+    const classrooms = await getClassrooms();
     const isTeacher = allowedTeacher(claims, process.env.TEACHER_EMAIL);
     if (body.role === 'teacher' && !isTeacher) {
       return Response.json({ error: 'This Google account does not have teacher access. Choose an approved teacher account.' }, { status: 403 });
     }
-    if (!isTeacher && !approvedStudent(claims, policy)) {
-      return Response.json({ error: 'This Google account has not been approved for this classroom.' }, { status: 403 });
+    if (!isTeacher && !classrooms.some(classroom => approvedStudent(claims, classroom))) {
+      return Response.json({ error: 'This Google account has not been approved for a classroom.' }, { status: 403 });
     }
     const session = await auth.createSessionCookie(body.idToken, { expiresIn: SESSION_SECONDS * 1000 });
     (await cookies()).set(SESSION_COOKIE, session, {
